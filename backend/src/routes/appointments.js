@@ -1,6 +1,8 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
-const { authenticate } = require('../middleware/auth');
+const { authenticate ,authorize } = require('../middleware/auth');
+const { ApiResponse } = require('../utils/ApiResponse');
+const { ApiError } = require('../utils/ApiError');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -18,40 +20,33 @@ router.get('/', authenticate, async (req, res) => {
     if (doctorId) where.doctorId = doctorId;
     if (status) where.status = status;
 
-    // Fetch core appointments
+    // used include to fetch data in single query
     const appointments = await prisma.appointment.findMany({
       where,
       orderBy: { appointmentDate: 'asc' },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            phoneNumber: true,
+            age: true,
+            medicalHistory: true,
+          },
+        },
+        doctor: {
+          select: {
+            id: true,
+            name: true,
+            specialization: true,
+          },
+        },
+      },
     });
 
-    const detailedAppointments = [];
-
-    // N+1 triggers here: For every single appointment, we perform two extra queries!
-    for (const app of appointments) {
-      console.log(`[N+1 DB QUERY] Fetching Patient (${app.patientId}) and Doctor (${app.doctorId}) for Appointment ${app.id}`);
-      
-      const patient = await prisma.patient.findUnique({
-        where: { id: app.patientId },
-      });
-
-      const doctor = await prisma.doctor.findUnique({
-        where: { id: app.doctorId },
-      });
-
-      detailedAppointments.push({
-        ...app,
-        patient: patient ? { id: patient.id, name: patient.name, phoneNumber: patient.phoneNumber, age: patient.age, medicalHistory: patient.medicalHistory } : null,
-        doctor: doctor ? { id: doctor.id, name: doctor.name, specialization: doctor.specialization } : null,
-      });
-    }
-
-    res.json({
-      success: true,
-      count: detailedAppointments.length,
-      appointments: detailedAppointments,
-    });
+    res.json(new ApiResponse(true, appointments.length, appointments));
   } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve appointments', details: error.message });
+    res.status(500).json(new ApiResponse(500, null, 'Failed to fetch appointments', error.message));
   }
 });
 
@@ -69,23 +64,27 @@ router.post('/', authenticate, async (req, res) => {
     }
 
     const appDate = new Date(appointmentDate);
+    
+    // created the start and end of the slot but its only for every hour
+    const startOfSlot = new Date(appDate);
+    startOfSlot.setMinutes(0, 0, 0);
+    
+    const endOfSlot = new Date(startOfSlot);
+    endOfSlot.setHours(endOfSlot.getHours() + 1);
 
-    // Flawed duplicate check:
-    // It only checks if the exact millisecond matches. If the candidate books for "2026-05-25 10:00:00"
-    // and another for "2026-05-25 10:00:01", they are treated as unique!
-    // Junior dev logic: "Same time bookings will be blocked."
     const existingBooking = await prisma.appointment.findFirst({
       where: {
         doctorId,
-        appointmentDate: appDate,
+        appointmentDate: {
+          gte: startOfSlot,
+          lt: endOfSlot,
+        },
         status: { not: 'CANCELLED' },
       },
     });
 
     if (existingBooking) {
-      return res.status(400).json({
-        error: 'Double booking blocked. Doctor already has an appointment at this exact millisecond.',
-      });
+      throw new ApiError(400, 'This time slot is already booked for the selected doctor. Please choose a different time.');
     }
 
     const appointment = await prisma.appointment.create({
@@ -98,18 +97,17 @@ router.post('/', authenticate, async (req, res) => {
       },
     });
 
-    res.status(201).json({
-      message: 'Appointment booked successfully',
-      appointment,
-    });
+    res.status(201).json(new ApiResponse(201, appointment, 'Appointment booked successfully'));
   } catch (error) {
-    res.status(500).json({ error: 'Failed to book appointment', details: error.message });
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json(new ApiResponse(error.statusCode, null, error.message));
+    }
+    res.status(500).json(new ApiResponse(500, null, 'Failed to book appointment', error.message));
   }
 });
 
-// PATCH /api/appointments/:id
-// Update appointment status (COMPLETED, CANCELLED, etc.)
-router.patch('/:id', authenticate, async (req, res) => {
+//changed the authenticate to only doctor and admin can update
+router.patch('/:id', authenticate,authorize(['ADMIN', 'DOCTOR']), async (req, res) => {
   try {
     const { status } = req.body;
 
@@ -122,9 +120,12 @@ router.patch('/:id', authenticate, async (req, res) => {
       data: { status },
     });
 
-    res.json(updated);
+    res.status(200).json(new ApiResponse(true, updated, 'Appointment status updated successfully'));
   } catch (error) {
-    res.status(500).json({ error: 'Failed to update appointment', details: error.message });
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json(new ApiResponse(error.statusCode, null, error.message));
+    }
+    res.status(500).json(new ApiResponse(500, null, 'Failed to update appointment', error.message));
   }
 });
 

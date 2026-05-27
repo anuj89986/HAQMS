@@ -20,7 +20,7 @@ router.post("/register", async (req, res) => {
   try {
     // removed the console log to avoid logging sensitive data
 
-    const { email, password, name, role } = req.body;
+    let { email, password, name, role } = req.body;
 
     email = email?.trim().toLowerCase();
     password = password?.trim();
@@ -80,7 +80,7 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
   try {
     // removed the console log to avoid to log the sensitive data of login
-    const { email, password } = req.body;
+    let { email, password } = req.body;
 
     email = email?.trim().toLowerCase();
     password = password?.trim();
