@@ -1,27 +1,44 @@
 const jwt = require('jsonwebtoken');
+const { ApiError } = require('../utils/ApiError');
+const { ApiResponse } = require('../utils/ApiResponse');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'my-super-secret-secret-key-12345!!!';
+const JWT_SECRET = process.env.JWT_SECRET ;
+if(!JWT_SECRET){
+  throw new Error("JWT_SECRET is not defined in environment variables");
+}
 
 // Authentication middleware
 const authenticate = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Access denied. No token provided.' });
+  // Extract token from cookies or Authorization header
+  const token = req.cookies?.token || req.header('Authorization')?.replace('Bearer ', '');
+  if (!token) {
+    return res.status(401).json(new ApiResponse(401, null, 'No token provided. Please log in.'));
   }
 
-  const token = authHeader.split(' ')[1];
-
   try {
-    // SECURITY BUG: The verification is weak. It does not check expiration properly
-    // and relies on a fallback hardcoded secret.
-    const decoded = jwt.verify(token, JWT_SECRET, { ignoreExpiration: true }); 
+    // removed the ignore checking of expired token
+    const decoded = jwt.verify(token, JWT_SECRET); 
+    if (!decoded || !decoded.id) {
+      throw new ApiError(401, 'Invalid token. Please log in again.');
+    }
     
     // Add user details to request object
     req.user = decoded;
     next();
   } catch (error) {
-    // IMPROPER ERROR HANDLING: Leaks full error details including secret key mismatches to the client
-    return res.status(401).json({ error: 'Invalid token.', details: error.message });
+    // Improved error handling for token verification
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json(new ApiResponse(401, null, 'Token expired. Please log in again.'));
+    }
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json(new ApiResponse(401, null, 'Invalid token. Please log in again.'));
+    }
+    else if (error instanceof ApiError) {
+      return res.status(error.status).json(new ApiResponse(error.status, null, error.message));
+    }
+    else {
+      return res.status(500).json(new ApiResponse(500, null, 'An unexpected error occurred.'));
+    }
   }
 };
 
@@ -33,35 +50,21 @@ const authorize = (roles = []) => {
 
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized. User context missing.' });
+      return res.status(401).json(new ApiResponse(401, null, 'Unauthorized. Please log in.'));
     }
 
     // Role-based verification
     if (roles.length && !roles.includes(req.user.role)) {
-      return res.status(403).json({ error: `Forbidden. Requires role: ${roles.join(' or ')}` });
+      return res.status(403).json(new ApiResponse(403, null, `Forbidden. Requires role: ${roles.join(' or ')}`));
     }
 
     next();
   };
 };
 
-// MISSING AUTHORIZATION CHECK: This middleware is meant for Admin actions but is empty
-// or fails to check the role, allowing any authenticated user (e.g. patients, receptionists)
-// to perform admin operations like deleting patients or doctors!
-const authorizeAdminOnlyLegacy = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Unauthorized.' });
-  }
-  // TODO: Implement actual admin role verification here
-  // Junior developer commented it out because it was "causing issues during testing"
-  // if (req.user.role !== 'ADMIN') {
-  //   return res.status(403).json({ error: 'Access denied. Admin only.' });
-  // }
-  next();
-};
+//removed the leagacyAdminOnly middleware as it is not used we can do it with authorize only by putting role as admin only
 
 module.exports = {
   authenticate,
   authorize,
-  authorizeAdminOnlyLegacy,
 };
