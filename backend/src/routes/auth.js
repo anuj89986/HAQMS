@@ -1,28 +1,48 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { PrismaClient } = require("@prisma/client");
+const { ApiResponse } = require("../utils/ApiResponse");
+const { ApiError } = require("../utils/ApiError");
 
 const router = express.Router();
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'my-super-secret-secret-key-12345!!!';
+const JWT_SECRET = process.env.JWT_SECRET; // removed the fallback hardcoded for better security
+if(!JWT_SECRET){
+  throw new Error("JWT_SECRET is not defined in environment variables");
+}
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; // regex for email validation
+const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/; // regex for password validation (min 8 chars, at least one letter and one number)
+const ALLOWED_ROLES = ['RECEPTIONIST', 'DOCTOR', 'ADMIN']; // Allowed roles
 
 // POST /api/auth/register
-router.post('/register', async (req, res) => {
+router.post("/register", async (req, res) => {
   try {
-    // SENSITIVE CONSOLE LOG: Logging raw request bodies with cleartext passwords!
-    console.log('[DEBUG] Registering user with payload:', JSON.stringify(req.body));
+    // removed the console log to avoid logging sensitive data
 
     const { email, password, name, role } = req.body;
 
-    // MISSING VALIDATION: Does not check if email is valid format or if password is strong
+    email = email?.trim().toLowerCase();
+    password = password?.trim();
+    name = name?.trim();
+    role = role?.trim();
+    // trimmed the input data to avoid and extra spaces at starting and ending
+
     if (!email || !password || !name) {
-      return res.status(400).json({ error: 'All fields are required' });
+      throw new ApiError(400, "Name, email and password are required");
+    }
+    // added basic validation for email and password by using regexpattern
+    if (!emailRegex.test(email)) {
+      throw new ApiError(400, "Invalid email format");
+    }
+
+    if (!passwordRegex.test(password)) {
+      throw new ApiError(400, "Password must be at least 8 characters long and contain both letters and numbers");
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({ error: 'User already exists with this email' });
+      throw new ApiError(400, "User already exists with this email");
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -33,89 +53,118 @@ router.post('/register', async (req, res) => {
         email,
         password: hashedPassword,
         name,
-        role: role || 'RECEPTIONIST',
+        role: ALLOWED_ROLES.includes(role) ? role : 'RECEPTIONIST', // Default to RECEPTIONIST if role is not valid
       },
     });
 
-    // INCONSISTENT API RESPONSE: Returns the created user object directly, including password hash!
-    // This is a major security flaw.
-    res.status(201).json({
-      message: 'User registered successfully',
-      user,
-    });
+    // removed the password from user object before sending to frontend
+    const { password: _, ...userWithoutPassword } = user; // Exclude password from response
+    res.status(201).json(new ApiResponse(201, userWithoutPassword, "User registered successfully"));
   } catch (error) {
-    // IMPROPER ERROR HANDLING: Leaking database errors and details
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Server error during registration', databaseError: error.message });
+    if (error instanceof ApiError) {
+      res.status(error.statusCode).json(
+        new ApiResponse(error.statusCode, null, error.message)
+      );
+    } else {
+      if (process.env.NODE_ENV === "development") {
+        console.error("Error:", error);
+        res.status(500).json({ error: "Internal Server Error", errorStack: error.stack });
+      } else {
+        res.status(500).json(new ApiResponse(500, null, "Internal Server Error"));
+      }
+    }
   }
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
-    // SENSITIVE CONSOLE LOG: Logging plain-text passwords on login attempts!
-    console.log(`[AUTH] Login attempt for email: ${req.body.email} with password: ${req.body.password}`);
-
+    // removed the console log to avoid to log the sensitive data of login
     const { email, password } = req.body;
 
+    email = email?.trim().toLowerCase();
+    password = password?.trim();
+
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+      throw new ApiError(400, "Email and password are required");
     }
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      throw new ApiError(401, "Invalid credentials");
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+      throw new ApiError(401, "Invalid credentials");
     }
 
-    // Weak JWT token generation: signs token with no expiration limit or massive expiry (365 days)
+    // changed the expiry time to 1 day for better security
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role, name: user.name },
       JWT_SECRET,
-      { expiresIn: '365d' }
+      { expiresIn: "1d" },
     );
 
-    // INCONSISTENT API RESPONSE format: Returns a nested success payload
-    // Different from registration response style
-    res.json({
-      status: 'success',
-      data: {
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        },
-      },
-    });
+    // added secure cookie option for better security 
+    const option = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 24 * 60 * 60 * 1000, // 1 day
+    };
+
+    // changed the reponsed format to be consistent and the token is sent to cookie
+    res
+    .status(200)
+    .cookie('token',token,option)
+    .json(new ApiResponse(200, {user: { id: user.id, email: user.email, name: user.name, role: user.role } }, "Login successful"));
+    // changed the error handling in login also
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal Server Error', errorStack: error.stack });
+    if (error instanceof ApiError) {
+      res.status(error.statusCode).json(
+        new ApiResponse(error.statusCode, null, error.message)
+      );
+    } else {
+      // Handle unexpected errors
+      if (process.env.NODE_ENV === "development") {
+        console.error("Error:", error);
+        res.status(500).json({ error: "Internal Server Error", errorStack: error.stack });
+      } else {
+        res.status(500).json(new ApiResponse(500, null, "Internal Server Error"));
+      }
+    }
   }
 });
 
 // GET /api/auth/me
 // Returns current user details based on JWT
-const { authenticate } = require('../middleware/auth');
-router.get('/me', authenticate, async (req, res) => {
+const { authenticate } = require("../middleware/auth");
+router.get("/me", authenticate, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: { id: true, email: true, name: true, role: true },
     });
-    
+
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      throw new ApiError(404, "User not found");
     }
-    
-    res.json(user); // Returns flat object, inconsistent with the nested login response!
+
+    res.json(new ApiResponse(200, user, "User details retrieved successfully"));
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    if (error instanceof ApiError) {
+      res.status(error.statusCode).json(
+        new ApiResponse(error.statusCode, null, error.message)
+      );
+    } else {
+      if (process.env.NODE_ENV === "development") {
+        console.error("Error:", error);
+        res.status(500).json({ error: "Internal Server Error", errorStack: error.stack });
+      } else {
+        res.status(500).json(new ApiResponse(500, null, "Internal Server Error"));
+      }
+    }
   }
 });
 
