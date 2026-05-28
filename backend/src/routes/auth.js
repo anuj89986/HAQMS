@@ -122,8 +122,8 @@ router.post("/login", async (req, res) => {
     // changed the error handling in login also
   } catch (error) {
     if (error instanceof ApiError) {
-      res.status(error.statusCode).json(
-        new ApiResponse(error.statusCode, null, error.message)
+      res.status(error.status).json(
+        new ApiResponse(error.status, null, error.message)
       );
     } else {
       // Handle unexpected errors
@@ -154,8 +154,8 @@ router.get("/me", authenticate, async (req, res) => {
     res.json(new ApiResponse(200, user, "User details retrieved successfully"));
   } catch (error) {
     if (error instanceof ApiError) {
-      res.status(error.status).json(
-        new ApiResponse(error.status, null, error.message)
+      res.status(error.statusCode).json(
+        new ApiResponse(error.statusCode, null, error.message)
       );
     } else {
       if (process.env.NODE_ENV === "development") {
