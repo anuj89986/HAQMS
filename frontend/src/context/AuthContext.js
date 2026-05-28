@@ -12,7 +12,7 @@ export const AuthProvider = ({ children }) => {
   const router = useRouter();
 
   // removed hardcoded API base URL, now using environment variable
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000/api';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
   useEffect(() => {
     // verify token with server by calling a /me endpoint
