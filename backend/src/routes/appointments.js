@@ -44,7 +44,7 @@ router.get('/', authenticate, async (req, res) => {
       },
     });
 
-    res.json(new ApiResponse(true, appointments.length, appointments));
+    res.json(new ApiResponse(200, appointments, 'Appointments retrieved successfully'));
   } catch (error) {
     res.status(500).json(new ApiResponse(500, null, 'Failed to fetch appointments', error.message));
   }

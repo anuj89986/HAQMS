@@ -12,7 +12,7 @@ export default function Home() {
           Live Queue Tracking Enabled
         </div>
         
-        <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent">
+        <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight bg-linear-to-r from-teal-600 to-emerald-500 bg-clip-text text-transparent">
           HAQMS
         </h1>
         <p className="text-xl sm:text-2xl font-bold mt-2 text-slate-700 dark:text-slate-200">

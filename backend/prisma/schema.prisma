@@ -95,6 +95,7 @@ model Appointment {
 model QueueToken {
   id            String      @id @default(uuid())
   tokenNumber   Int
+  queueDate     DateTime    // NEW: date-only (00:00 UTC or local)
   patientId     String
   patient       Patient     @relation(fields: [patientId], references: [id])
   doctorId      String
@@ -104,7 +105,7 @@ model QueueToken {
   status        QueueStatus @default(WAITING)
   createdAt     DateTime    @default(now())
 
-  // added index
+  @@unique([doctorId, queueDate, tokenNumber]) // prevents duplicates per day
   @@index([doctorId, createdAt])
   @@index([status])
   @@index([patientId])

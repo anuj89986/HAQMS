@@ -45,35 +45,42 @@ router.post('/checkin', authenticate, async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // fetch max token and create new token in a single transaction
+    // retry up to 5 times if a duplicate tokenNumber slips in
     const newToken = await prisma.$transaction(async (transc) => {
-      
-      const maxTokenResult = await transc.queueToken.aggregate({
-        where: {
-          doctorId,
-          createdAt: { gte: today },
-        },
-        _max: {
-          tokenNumber: true,
-        },
-      });
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const maxTokenResult = await transc.queueToken.aggregate({
+          where: {
+            doctorId,
+            queueDate: today,
+          },
+          _max: { tokenNumber: true },
+        });
 
-      const currentMax = maxTokenResult._max.tokenNumber || 0;
-      const nextTokenNumber = currentMax + 1;
+        const currentMax = maxTokenResult._max.tokenNumber || 0;
+        const nextTokenNumber = currentMax + 1;
 
-      return await transc.queueToken.create({
-        data: {
-          tokenNumber: nextTokenNumber,
-          patientId,
-          doctorId,
-          appointmentId: appointmentId || null,
-          status: 'WAITING',
-        },
-        include: {
-          patient: true,
-          doctor: true,
-        },
-      });
+        try {
+          return await transc.queueToken.create({
+            data: {
+              tokenNumber: nextTokenNumber,
+              queueDate: today,
+              patientId,
+              doctorId,
+              appointmentId: appointmentId || null,
+              status: 'WAITING',
+            },
+            include: { patient: true, doctor: true },
+          });
+        } catch (err) {
+          // Prisma unique constraint error code
+          if (err.code !== 'P2002') {
+            throw err;
+          }
+          // otherwise retry
+        }
+      }
+
+      throw new Error('Failed to allocate token after retries');
     });
 
     res.status(201).json(new ApiResponse(201, newToken, 'Checked in successfully. Token generated.'));

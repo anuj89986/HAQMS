@@ -62,8 +62,8 @@ router.post("/register", async (req, res) => {
     res.status(201).json(new ApiResponse(201, userWithoutPassword, "User registered successfully"));
   } catch (error) {
     if (error instanceof ApiError) {
-      res.status(error.statusCode).json(
-        new ApiResponse(error.statusCode, null, error.message)
+      res.status(error.status).json(
+        new ApiResponse(error.status, null, error.message)
       );
     } else {
       if (process.env.NODE_ENV === "development") {
@@ -154,8 +154,8 @@ router.get("/me", authenticate, async (req, res) => {
     res.json(new ApiResponse(200, user, "User details retrieved successfully"));
   } catch (error) {
     if (error instanceof ApiError) {
-      res.status(error.statusCode).json(
-        new ApiResponse(error.statusCode, null, error.message)
+      res.status(error.status).json(
+        new ApiResponse(error.status, null, error.message)
       );
     } else {
       if (process.env.NODE_ENV === "development") {
@@ -165,6 +165,26 @@ router.get("/me", authenticate, async (req, res) => {
         res.status(500).json(new ApiResponse(500, null, "Internal Server Error"));
       }
     }
+  }
+});
+
+// added logout endpoint to clear the cookie rather removing from localStorage
+router.post("/logout", (req, res) => {
+  try {
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+    res.json(new ApiResponse(200, null, "Logout successful"));
+  } catch (error) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("Error:", error);
+      res.status(500).json({ error: "Internal Server Error", errorStack: error.stack });
+    }
+      else {
+        res.status(500).json(new ApiResponse(500, null, "Internal Server Error"));
+      }
   }
 });
 

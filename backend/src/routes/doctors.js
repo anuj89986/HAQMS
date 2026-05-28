@@ -8,30 +8,36 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 // GET /api/doctors
-// Retrieve list of doctors with special search filtering
+// Retrieve list of doctors with optional search + specialization filtering
 router.get('/', authenticate, async (req, res) => {
   try {
     const { search, specialization } = req.query;
 
-    let query = 'SELECT * FROM "Doctor" WHERE 1=1'; // Base query for easy appending of conditions
-    const params = [];
+    const where = {};
 
-    if (search) {
-      // Using parameterized query 
-      query += ' AND name ILIKE $' + (params.length + 1);
-      params.push(`%${search}%`);
+    if (search && String(search).trim() !== '') {
+      where.name = {
+        contains: String(search).trim(),
+        mode: 'insensitive',
+      };
     }
 
     if (specialization && specialization !== 'All') {
-      query += ' AND specialization = $' + (params.length + 1);
-      params.push(specialization);
+      where.specialization = String(specialization).trim();
     }
 
-    const doctors = await prisma.$queryRaw(query, ...params);
+    const doctors = await prisma.doctor.findMany({
+      where,
+      orderBy: { name: 'asc' },
+    });
 
-    res.json(new ApiResponse(200, doctors, 'Doctors retrieved successfully'));
+    return res.json(new ApiResponse(200, doctors, 'Doctors retrieved successfully'));
   } catch (error) {
-    res.status(500).json(new ApiResponse(500, null, 'Failed to retrieve doctors'));
+    if(process.env.NODE_ENV === "development") {
+      console.error("Error:", error);
+      return res.status(500).json({ error: "Internal Server Error", errorStack: error.stack });
+    }
+    return res.status(500).json(new ApiResponse(500, null, 'Failed to retrieve doctors'));
   }
 });
 
@@ -69,6 +75,10 @@ router.get('/stats', authenticate, authorize(['ADMIN']), async (req, res) => {
       executionTimeMs: durationMs,
     }, 'Doctor statistics retrieved successfully'));
   } catch (error) {
+    if(process.env.NODE_ENV === "development") {
+      console.error("Error:", error);
+      return res.status(500).json({ error: "Internal Server Error", errorStack: error.stack });
+    }
     res.status(500).json(new ApiResponse(500, null, 'Failed to retrieve doctor statistics'));
   }
 });
@@ -88,6 +98,10 @@ router.get('/:id', authenticate, async (req, res) => {
   } catch (error) {
     if (error instanceof ApiError) {
       return res.status(error.statusCode).json(new ApiResponse(error.statusCode, null, error.message));
+    }
+    if(process.env.NODE_ENV === "development") {
+      console.error("Error:", error);
+      return res.status(500).json({ error: "Internal Server Error", errorStack: error.stack });
     }
     res.status(500).json(new ApiResponse(500, null, 'Failed to retrieve doctor'));
   }

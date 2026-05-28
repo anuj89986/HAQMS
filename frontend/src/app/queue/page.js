@@ -11,6 +11,8 @@ export default function QueueMonitor() {
   const [error, setError] = useState('');
   const [refreshCount, setRefreshCount] = useState(0);
 
+  const abortControllerRef = useRef(null);
+
   // except hardcoded get from AuthContext
  const { API_BASE_URL } = useAuth();
 
@@ -20,6 +22,7 @@ export default function QueueMonitor() {
       abortControllerRef.current = new AbortController();
 
       const res = await fetch(`${API_BASE_URL}/queue`, {
+        credentials: 'include',
         signal: abortControllerRef.current.signal
       });
 
@@ -28,8 +31,13 @@ export default function QueueMonitor() {
       }
 
       const data = await res.json();
-      setTokens(data);
-      setError('');
+      if (data.success && Array.isArray(data.data)) {
+        setTokens(data.data);
+        setError('');
+        console.log('Fetched queue data:', data.data);
+      } else {
+        throw new Error(data.message || 'Failed to retrieve active token queue.');
+      }
     } catch (err) {
       // don't log abort errors
       if (err.name !== 'AbortError') {
