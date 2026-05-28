@@ -12,4 +12,4 @@ class ApiError extends Error{
         this.success=false
     }
 }
-export {ApiError}
+module.exports = { ApiError }

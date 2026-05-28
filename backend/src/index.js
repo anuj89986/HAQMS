@@ -1,6 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const cookieParser = require('cookie-parser');
+const { ApiError } = require('./utils/ApiError');
+const { ApiResponse } = require('./utils/ApiResponse');
 
 // Load environment variables
 dotenv.config();
@@ -15,7 +18,7 @@ const reportRoutes = require('./routes/reports');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS for all origins (weak/broad CORS config)
+// currently allowing the development domain
 app.use(cors({
   origin: "http://localhost:3000",
   credentials: true
@@ -23,6 +26,9 @@ app.use(cors({
 
 // Body parser
 app.use(express.json());
+
+// added the cookie parser middleware to handle cookies 
+app.use(cookieParser());
 
 // Simple request logger
 app.use((req, res, next) => {
@@ -43,20 +49,26 @@ app.get('/', (req, res) => {
   res.json({
     message: 'Hospital Appointment and Queue Management System (HAQMS) Backend API',
     status: 'Running',
-    version: '1.0.0-deliberate-bugs'
+    version: '1.0.0'
   });
 });
 
-// GLOBAL ERROR HANDLER
-// BUG: Improper error handling. It returns the raw error stack trace to the client,
-// which leaks details about database types, schema layout, and file paths.
+// fixed error leaking to client
 app.use((err, req, res, next) => {
+  // it is only log in the server console
   console.error('[CRITICAL-ERROR]:', err);
-  res.status(500).json({
-    message: 'An unexpected internal server error occurred!',
-    error: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-  });
+
+  // Check if error is an ApiError instance
+  if (err instanceof ApiError) {
+    return res.status(err.statusCode).json(
+      new ApiResponse(err.statusCode, null, err.message)
+    );
+  }
+
+  // For unexpected errors, return generic message without details
+  res.status(500).json(
+    new ApiResponse(500, null, 'An unexpected internal server error occurred!')
+  );
 });
 
 // Listen on port
@@ -70,5 +82,8 @@ app.listen(PORT, () => {
 // Catch unhandled rejections
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  // Intentionally do not exit process so candidates see unhandled promise logs
+  // In production, should exit process after logging critical error
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
 });

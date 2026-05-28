@@ -2,8 +2,8 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { PrismaClient } = require("@prisma/client");
-const { ApiResponse } = require("../utils/ApiResponse");
-const { ApiError } = require("../utils/ApiError");
+const { ApiResponse } = require("../utils/ApiResponse.js");
+const { ApiError } = require("../utils/ApiError.js");
 
 const router = express.Router();
 const prisma = new PrismaClient();
