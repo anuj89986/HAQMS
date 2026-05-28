@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import Navbar from '@/components/common/Navbar';
 import { Activity, Bell, Monitor, RefreshCw, AlertCircle } from 'lucide-react';
 
@@ -8,27 +9,33 @@ export default function QueueMonitor() {
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // Duplicated config state just to add minor code smell
   const [refreshCount, setRefreshCount] = useState(0);
 
-  // HARDCODED API BASE URL: Duplicated from AuthContext (code duplication smell)
-  const API_BASE_URL = 'http://localhost:5000/api';
+  // except hardcoded get from AuthContext
+ const { API_BASE_URL } = useAuth();
 
   const fetchQueueData = async () => {
     try {
-      // Insecure: Fetches queue without checking credentials (it's a public dashboard, which is fine, 
-      // but it uses the hardcoded API domain)
-      const res = await fetch(`${API_BASE_URL}/queue`);
+      // abort controller if the user closes the page so the fetch will get aborted
+      abortControllerRef.current = new AbortController();
+
+      const res = await fetch(`${API_BASE_URL}/queue`, {
+        signal: abortControllerRef.current.signal
+      });
+
       if (!res.ok) {
         throw new Error('Failed to retrieve active token queue.');
       }
+
       const data = await res.json();
       setTokens(data);
       setError('');
     } catch (err) {
-      console.error('Queue poll fetch error:', err);
-      setError(err.message);
+      // don't log abort errors
+      if (err.name !== 'AbortError') {
+        console.error('Queue poll fetch error:', err);
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -38,40 +45,47 @@ export default function QueueMonitor() {
     // Initial fetch
     fetchQueueData();
 
-    // MEMORY LEAK BUG:
-    // This setInterval has NO cleanup function (does not return clearInterval).
-    // Every time this page is mounted, a new background polling timer is spun up.
-    // If the candidate navigates between Dashboard and Queue multiple times,
-    // dozens of parallel intervals will poll the database, causing memory bloat,
-    // state update crashes on unmounted components, and heavy server load.
+    // used proper cleanup
     const intervalId = setInterval(() => {
-      console.log(`[POLL] Active Queue Poll #${refreshCount + 1} firing...`);
       fetchQueueData();
+      // Use callback form to avoid stale closure issues
       setRefreshCount((prev) => prev + 1);
     }, 3000);
 
-    // Junior Developer Note: "Interval created, will run forever to keep dashboard fully synced!"
-    // Missing: return () => clearInterval(intervalId);
-  }, []); // Note that refreshCount dependency is missing too, causing stale closure on log!
+    // returned cleanup function
+    return () => {
+      clearInterval(intervalId);
+      // cancel any in-going fetch request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
-  // Group tokens by doctor
   const groupedTokens = tokens.reduce((groups, token) => {
-    const docId = token.doctorId;
-    if (!groups[docId]) {
-      groups[docId] = {
-        doctorName: token.doctor.name,
-        specialization: token.doctor.specialization,
-        calling: null,
-        waiting: [],
-      };
+    try {
+      const docId = token.doctorId;
+
+      //used chaining for any null or undefined value
+      if (!groups[docId]) {
+        groups[docId] = {
+          doctorName: token.doctor?.name ?? 'Unknown Doctor',
+          specialization: token.doctor?.specialization ?? 'Unknown Specialty',
+          calling: null,
+          waiting: [],
+        };
+      }
+
+      if (token.status === 'CALLING') {
+        groups[docId].calling = token;
+      } else if (token.status === 'WAITING') {
+        groups[docId].waiting.push(token);
+      }
+      return groups;
+    } catch (err) {
+      console.error('Error processing token:', token, err);
+      return groups;
     }
-    
-    if (token.status === 'CALLING') {
-      groups[docId].calling = token;
-    } else if (token.status === 'WAITING') {
-      groups[docId].waiting.push(token);
-    }
-    return groups;
   }, {});
 
   return (
@@ -164,7 +178,7 @@ export default function QueueMonitor() {
                           #{docInfo.calling.tokenNumber}
                         </span>
                         <span className="block text-xs font-bold text-slate-400 uppercase tracking-wide mt-2">
-                          Patient: {docInfo.calling.patient.name}
+                          Patient: {docInfo.calling.patient?.name ?? 'Unknown'}
                         </span>
                       </div>
                     ) : (
@@ -190,7 +204,7 @@ export default function QueueMonitor() {
                           <div
                             key={token.id}
                             className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300"
-                            title={`Patient: ${token.patient.name}`}
+                            title={`Patient: ${token.patient?.name ?? 'Unknown'}`}
                           >
                             #{token.tokenNumber}
                           </div>
