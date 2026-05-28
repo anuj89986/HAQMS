@@ -8,7 +8,7 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 // GET /api/reports/doctor-stats
-// Optimized aggregation reporting for admin/receptionists dashboard
+// optimized aggregation reporting for admin/receptionists dashboard
 router.get('/doctor-stats', authenticate, async (req, res) => {
   try {
     const start = Date.now();
