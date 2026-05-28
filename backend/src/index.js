@@ -18,9 +18,9 @@ const reportRoutes = require('./routes/reports');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// currently allowing the development domain
+// currently allowing the specific domain
 app.use(cors({
-  origin: "http://localhost:3000",
+  origin: "https://haqms-ashy.vercel.app/",
   credentials: true
 }));
 
