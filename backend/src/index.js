@@ -20,7 +20,7 @@ const PORT = process.env.PORT || 5000;
 
 // currently allowing the specific domainc
 app.use(cors({
-  origin: "https://haqms-ashy.vercel.app/",
+  origin: "https://haqms-ashy.vercel.app",
   credentials: true
 }));
 
