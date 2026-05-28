@@ -34,7 +34,6 @@ export default function QueueMonitor() {
       if (data.success && Array.isArray(data.data)) {
         setTokens(data.data);
         setError('');
-        console.log('Fetched queue data:', data.data);
       } else {
         throw new Error(data.message || 'Failed to retrieve active token queue.');
       }
