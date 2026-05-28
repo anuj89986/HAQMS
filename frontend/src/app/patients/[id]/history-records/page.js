@@ -108,7 +108,7 @@ export default function PatientHistoryRecords() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
+    <div className="min-h-screen flex flex-col bg-linear-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
       <Navbar />
 
       <main className="flex-1 max-w-4xl w-full mx-auto p-6 sm:p-8">
