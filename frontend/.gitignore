@@ -2,25 +2,29 @@
 # Dependencies
 # =========================
 node_modules/
+.pnp/
+.pnp.js
 
 # =========================
-# Build folders
+# Next.js build output
 # =========================
-dist/
-build/
 .next/
 out/
-coverage/
+build/
 
 # =========================
 # Logs
 # =========================
-logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# =========================
+# Testing
+# =========================
+coverage/
 
 # =========================
 # Environment variables
@@ -32,60 +36,8 @@ pnpm-debug.log*
 .env.production.local
 
 # =========================
-# Prisma
-# =========================
-prisma/dev.db
-prisma/dev.db-journal
-
-# =========================
-# OS generated files
-# =========================
-.DS_Store
-Thumbs.db
-
-# =========================
-# IDE / Editor
-# =========================
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# =========================
-# Temporary files
-# =========================
-tmp/
-temp/
-
-# =========================
-# Cache
-# =========================
-.cache/
-.parcel-cache/
-
-# =========================
-# TypeScript
-# =========================
-*.tsbuildinfo
-
-# =========================
-# Package manager lock files
-# (Keep ONE depending on package manager)
-# =========================
-# package-lock.json
-# yarn.lock
-# pnpm-lock.yaml
-
-# =========================
-# Prisma generated files
-# =========================
-generated/
-
-# =========================
 # Misc
 # =========================
+.DS_Store
 *.pem
-*.pid
-
-# next.js
-.next/
+.vercel/
