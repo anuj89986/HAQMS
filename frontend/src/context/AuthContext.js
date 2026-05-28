@@ -11,14 +11,12 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const router = useRouter();
 
-  // HARDCODED API VALUE: Intentionally hardcoding the backend base URL on the frontend!
-  // This violates production standards and prevents simple domain config, but serves as
-  // a perfect exercise for internship candidates to move to environment variables.
-  const API_BASE_URL = 'http://localhost:5000/api';
+  // removed hardcoded API base URL, now using environment variable
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000/api';
 
   useEffect(() => {
-    // On mount, verify token with server by calling a /me endpoint
-    // This reconstructs user state from the cookie
+    // verify token with server by calling a /me endpoint
+    // reconstructs user state from the cookie
     const verifyAuth = async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/auth/me`, {
